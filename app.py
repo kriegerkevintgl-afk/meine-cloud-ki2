@@ -1,7 +1,7 @@
 import os
 import streamlit as st
 from openai import OpenAI
-from supabase import create_client
+import requests
 
 # Seiteneinstellungen
 st.set_page_config(page_title="KENA — KI Assistent", page_icon="⚡", layout="centered")
@@ -11,9 +11,6 @@ api_key = st.secrets.get("OPENROUTER_API_KEY") or os.getenv("OPENROUTER_API_KEY"
 supabase_url = st.secrets.get("SUPABASE_URL") or os.getenv("SUPABASE_URL")
 supabase_key = st.secrets.get("SUPABASE_KEY") or os.getenv("SUPABASE_KEY")
 
-# Debug-Ausgabe: Zeigt exakt an, was aus den Secrets geladen wird
-st.write(f"DEBUG URL: '{supabase_url}'")
-
 if not api_key:
     st.error("Bitte hinterlege deinen OPENROUTER_API_KEY in den Streamlit Secrets!")
     st.stop()
@@ -22,46 +19,61 @@ if not supabase_url or not supabase_key:
     st.error("Bitte hinterlege SUPABASE_URL und SUPABASE_KEY in den Streamlit Secrets!")
     st.stop()
 
-# Clients initialisieren
+# OpenAI Client initialisieren
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=api_key,
 )
 
-supabase = create_client(supabase_url, supabase_key)
+# Supabase REST-Header vorbereiten
+supabase_headers = {
+    "apikey": supabase_key,
+    "Authorization": f"Bearer {supabase_key}",
+    "Content-Type": "application/json",
+    "Prefer": "return=minimal"
+}
 
 # ---------------------------------------------------------
-# SUPABASE HILFSFUNKTIONEN FÜR DAUERHAFTEN SPEICHER
+# SUPABASE HILFSFUNKTIONEN (ÜBER DIREKTE HTTP-REQUESTS)
 # ---------------------------------------------------------
 def load_chats_from_db():
     try:
-        response = supabase.table("kena_chats").select("*").order("id").execute()
-        chats = {}
-        for row in response.data:
-            c_name = row["chat_name"]
-            if c_name not in chats:
-                chats[c_name] = []
-            chats[c_name].append({"role": row["role"], "content": row["content"]})
-        if not chats:
-            chats = {"Chat 1": []}
-        return chats
+        url = f"{supabase_url}/rest/v1/kena_chats?select=*&order=id.asc"
+        response = requests.get(url, headers=supabase_headers)
+        if response.status_code == 200:
+            rows = response.json()
+            chats = {}
+            for row in rows:
+                c_name = row["chat_name"]
+                if c_name not in chats:
+                    chats[c_name] = []
+                chats[c_name].append({"role": row["role"], "content": row["content"]})
+            if not chats:
+                chats = {"Chat 1": []}
+            return chats
+        else:
+            st.error(f"Datenbank-Fehler beim Laden: {response.text}")
+            return {"Chat 1": []}
     except Exception as e:
         st.error(f"Fehler beim Laden aus der Datenbank: {e}")
         return {"Chat 1": []}
 
 def save_message_to_db(chat_name, role, content):
     try:
-        supabase.table("kena_chats").insert({
+        url = f"{supabase_url}/rest/v1/kena_chats"
+        payload = {
             "chat_name": chat_name,
             "role": role,
             "content": content
-        }).execute()
+        }
+        requests.post(url, headers=supabase_headers, json=payload)
     except Exception as e:
         st.error(f"Fehler beim Speichern in der Datenbank: {e}")
 
 def delete_chat_from_db(chat_name):
     try:
-        supabase.table("kena_chats").delete().eq("chat_name", chat_name).execute()
+        url = f"{supabase_url}/rest/v1/kena_chats?chat_name=eq.{chat_name}"
+        requests.delete(url, headers=supabase_headers)
     except Exception as e:
         st.error(f"Fehler beim Löschen in der Datenbank: {e}")
 
@@ -247,7 +259,7 @@ else:  # 💡 Alltagsassistent
 # HAUPTSEITE (Chat-Oberfläche)
 # ---------------------------------------------------------
 st.title(f"⚡ KENA — {st.session_state.active_chat}")
-st.caption(f"Modus: `{modus}` | Modell: `{modell_name}` (Supabase-gesichert)")
+st.caption(f"Modus: `{modus}` | Modell: `{modell_name}` (Supabase-REST-gesichert)")
 
 # Nachrichten des aktuell gewählten Chats anzeigen
 active_messages = st.session_state.chats.get(st.session_state.active_chat, [])

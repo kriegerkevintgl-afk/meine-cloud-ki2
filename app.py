@@ -1,7 +1,5 @@
-import io
 import os
 import streamlit as st
-from gtts import gTTS
 from openai import OpenAI
 
 # Seiteneinstellungen
@@ -21,11 +19,10 @@ client = OpenAI(
 )
 
 # ---------------------------------------------------------
-# SEITENLEISTE (Einstellungen & Modus-Auswahl)
+# SEITENLEISTE (Modus-Auswahl)
 # ---------------------------------------------------------
 st.sidebar.title("⚙️ Einstellungen")
 
-# Modus manuell auswählen
 modus = st.sidebar.selectbox(
     "Wähle den KI-Modus:",
     [
@@ -36,14 +33,9 @@ modus = st.sidebar.selectbox(
     ],
 )
 
-# Schalter für die Sprachausgabe (Vorlesen)
-audio_output = st.sidebar.checkbox("🔊 Antworten vorlesen (Audio)", value=False)
-
 # Button zum Löschen des Chats
 if st.sidebar.button("🗑️ Chat-Verlauf löschen"):
     st.session_state.messages = []
-    if "last_audio_bytes" in st.session_state:
-        del st.session_state["last_audio_bytes"]
     st.rerun()
 
 # Konfiguration je nach Modus
@@ -98,43 +90,13 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.write(message["content"])
 
-# ---------------------------------------------------------
-# SPRACHEINGABE & TEXTEINGABE
-# ---------------------------------------------------------
-prompt = None
-
-# Option A: Direktes Mikrofonsymbol zum Aufnehmen
-audio_recorded = st.audio_input("🎤 Sprachnachricht aufnehmen")
-
-if audio_recorded:
-    audio_bytes = audio_recorded.getvalue()
-    # Verhindert mehrfaches Absenden beim Neuladen der Seite
-    if st.session_state.get("last_audio_bytes") != audio_bytes:
-        st.session_state["last_audio_bytes"] = audio_bytes
-        with st.spinner("Wandle Sprache in Text um..."):
-            try:
-                audio_file = ("audio.wav", audio_bytes, "audio/wav")
-                transcript = client.audio.transcriptions.create(
-                    model="openai/whisper-large-v3",
-                    file=audio_file,
-                )
-                prompt = transcript.text
-            except Exception as e:
-                st.error(f"Fehler bei der Spracherkennung: {e}")
-
-# Option B: Klassische Texteingabe (oder Diktierfunktion der Tastatur)
-text_input = st.chat_input("Schreibe eine Nachricht...")
-if text_input:
-    prompt = text_input
-
-# ---------------------------------------------------------
-# VERARBEITUNG & ANTWORT
-# ---------------------------------------------------------
-if prompt:
+# Benutzereingabe verarbeiten
+if prompt := st.chat_input("Schreibe eine Nachricht..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.write(prompt)
 
+    # KI-Antwort anfordern
     with st.chat_message("assistant"):
         with st.spinner("KI antwortet..."):
             try:
@@ -149,13 +111,5 @@ if prompt:
                 bot_reply = response.choices[0].message.content
                 st.write(bot_reply)
                 st.session_state.messages.append({"role": "assistant", "content": bot_reply})
-
-                # Sprachausgabe erzeugen, falls in der Seitenleiste aktiviert
-                if audio_output:
-                    tts = gTTS(text=bot_reply, lang="de")
-                    sound_file = io.BytesIO()
-                    tts.write_to_fp(sound_file)
-                    st.audio(sound_file, format="audio/mp3", autoplay=True)
-
             except Exception as e:
                 st.error(f"Fehler bei der Anfrage: {e}")

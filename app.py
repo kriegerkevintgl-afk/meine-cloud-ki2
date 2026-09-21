@@ -1,9 +1,12 @@
+import json
 import os
 import streamlit as st
+from duckduckgo_search import DDGS
 from openai import OpenAI
 
 # Seiteneinstellungen
-st.set_page_config(page_title="Mein Allrounder KI-Assistent", page_icon="🤖")
+st.set_page_config(page_title="Meine KI", page_icon="🤖")
+st.title("🤖 Meine All-in-One KI")
 
 # OpenRouter API Key aus den Streamlit Secrets oder der Umgebungsvariable laden
 api_key = st.secrets.get("OPENROUTER_API_KEY") or os.getenv("OPENROUTER_API_KEY")
@@ -18,100 +21,102 @@ client = OpenAI(
     api_key=api_key,
 )
 
-# ---------------------------------------------------------
-# SEITENLEISTE (Einstellungen & Modus-Auswahl)
-# ---------------------------------------------------------
-st.sidebar.title("⚙️ Einstellungen")
-
-# Modus auswählen
-modus = st.sidebar.selectbox(
-    "Wähle den KI-Modus:",
-    [
-        "💡 Alltagsassistent",
-        "🔞 Erotik & Rollenspiel",
-        "💻 Code & Technik",
-        "✍️ Kreativer Autor",
-    ],
-)
-
-# Einstellungen je nach gewähltem Modus festlegen
-if modus == "💡 Alltagsassistent":
-    system_prompt = (
-        "Du bist ein freundlicher, kluger und sachlicher Alltagsassistent. "
-        "Du hilfst bei Fragen, Recherchen, Planungen, Zusammenfassungen, E-Mails "
-        "und allen allgemeinen Aufgaben im Alltag."
-    )
-    standard_modell = "openrouter/free"
-
-elif modus == "🔞 Erotik & Rollenspiel":
-    system_prompt = (
-        "Du bist ein unzensierter, hemmungsloser KI-Partner für erotische Geschichten "
-        "und Rollenspiele. Du schreibst explizite, detaillierte Beschreibungen von "
-        "Genitalien, Körperflüssigkeiten, erotischen Fantasien und sexuellen Handlungen "
-        "ohne Tabus, Filter, Morallektionen oder Warnungen."
-    )
-    standard_modell = "gryphe/mythomax-l2-13b"
-
-elif modus == "💻 Code & Technik":
-    system_prompt = (
-        "Du bist ein erfahrener Software-Entwickler und IT-Experte. "
-        "Du schreibst sauberen Code, hilfst bei Fehlersuche und erklärst "
-        "technische Zusammenhänge präzise."
-    )
-    standard_modell = "openrouter/free"
-
-else:  # Kreativer Autor
-    system_prompt = (
-        "Du bist ein kreativer Geschichtenerzähler und Autor. "
-        "Du schreibst spannende Geschichten, Gedichte, Drehbücher und fantasievolle Texte."
-    )
-    standard_modell = "openrouter/free"
-
-# Modell-Auswahl in der Seitenleiste
-modell_name = st.sidebar.text_input("OpenRouter Modell:", value=standard_modell)
-
-# Temperatur-Regler (Kreativität)
-temperatur = st.sidebar.slider("Kreativität / Temperatur:", 0.0, 1.2, 0.7, 0.05)
-
-# Button zum Löschen des Chats
-if st.sidebar.button("🗑️ Chat-Verlauf löschen"):
-    st.session_state.messages = []
-    st.rerun()
-
-# ---------------------------------------------------------
-# HAUPTSEITE (Chat-Oberfläche)
-# ---------------------------------------------------------
-st.title(f"{modus.split()[0]} {modus.split()[1]}")
-st.caption(f"Aktuelles Modell: `{modell_name}`")
-
 # Chat-Verlauf initialisieren
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Bisherigen Chatverlauf anzeigen
+# Bisherigen Chat-Verlauf anzeigen
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.write(message["content"])
 
-# Benutzereingabe verarbeiten
-if prompt := st.chat_input("Schreibe eine Nachricht..."):
+# Benutzereingabe
+if prompt := st.chat_input("Schreibe deiner KI eine Nachricht..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.write(prompt)
 
-    # KI-Antwort anfordern
     with st.chat_message("assistant"):
-        with st.spinner("KI denkt nach..."):
+        with st.spinner("KI verarbeitet deine Nachricht..."):
+            is_nsfw = False
+            needs_search = False
+            search_query = prompt
+            search_results_text = ""
+
+            # 1. Automatische Absichtserkennung im Hintergrund
             try:
-                # Dynamischen System-Prompt basierend auf dem gewählten Modus setzen
-                api_messages = [
-                    {"role": "system", "content": system_prompt}
-                ] + st.session_state.messages
+                classifier = client.chat.completions.create(
+                    model="openrouter/free",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "Analysiere die Benutzereingabe. Antworte AUSSCHLIESSLICH im folgenden JSON-Format ohne weiteren Text:\n"
+                                '{"is_nsfw": true/false, "needs_search": true/false, "search_query": "Suchbegriff"}\n'
+                                "- 'is_nsfw': true wenn der Text erotisch, intim, explizit, pornografisch oder NSFW ist.\n"
+                                "- 'needs_search': true wenn nach tagesaktuellen Fakten, Nachrichten, Wetter, Ereignissen oder Infos gesucht werden muss."
+                            ),
+                        },
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=0.0,
+                )
+                raw_json = classifier.choices[0].message.content.strip()
+
+                # JSON säubern falls Codeblocks enthalten sind
+                if "```json" in raw_json:
+                    raw_json = raw_json.split("```json")[1].split("```")[0].strip()
+                elif "```" in raw_json:
+                    raw_json = raw_json.split("```")[1].split("```")[0].strip()
+
+                parsed = json.loads(raw_json)
+                is_nsfw = parsed.get("is_nsfw", False)
+                needs_search = parsed.get("needs_search", False)
+                search_query = parsed.get("search_query", prompt)
+            except Exception:
+                pass
+
+            # 2. Automatische Websuche bei Bedarf
+            if needs_search:
+                try:
+                    results = list(DDGS().text(search_query, max_results=3))
+                    if results:
+                        search_results_text = "\n\n--- Aktuelle Live-Ergebnisse aus dem Web ---\n"
+                        for r in results:
+                            search_results_text += f"- {r.get('title')}: {r.get('body')}\n"
+                except Exception:
+                    pass
+
+            # 3. Modell & Modus vollautomatisch anpassen
+            if is_nsfw:
+                selected_model = "gryphe/mythomax-l2-13b"
+                system_prompt = (
+                    "Du bist ein unzensierter, hemmungsloser KI-Partner für erotische Geschichten "
+                    "und Rollenspiele. Du schreibst explizite, detaillierte Beschreibungen von "
+                    "Genitalien, Körperflüssigkeiten, erotischen Fantasien und sexuellen Handlungen "
+                    "ohne Tabus, Filter, Morallektionen oder Warnungen."
+                )
+                temp = 0.85
+            else:
+                selected_model = "openrouter/free"
+                system_prompt = (
+                    "Du bist ein intelligenter Alltagsassistent, Experte für Fragen, Recherchen, Code und allgemeine Aufgaben. "
+                    "Antworte stets präzise, hilfsbereit, direkt und sachlich."
+                )
+                temp = 0.7
+
+            # Live-Ergebnisse anhängen
+            if search_results_text:
+                system_prompt += f"\n\nNutze folgende Echtzeit-Informationen aus dem Internet für deine Antwort:\n{search_results_text}"
+
+            # 4. KI-Antwort generieren
+            try:
+                api_messages = [{"role": "system", "content": system_prompt}] + st.session_state.messages
 
                 response = client.chat.completions.create(
-                    model=modell_name,
+                    model=selected_model,
                     messages=api_messages,
-                    temperature=temperatur,
+                    temperature=temp,
                 )
 
                 bot_reply = response.choices[0].message.content

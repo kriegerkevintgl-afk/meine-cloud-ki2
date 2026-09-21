@@ -5,6 +5,9 @@ from openai import OpenAI
 # Seiteneinstellungen
 st.set_page_config(page_title="KENA — KI Assistent", page_icon="⚡", layout="centered")
 
+# Browser-Übersetzung blockieren, um removeChild-DOM-Fehler zu verhindern
+st.markdown('<meta name="google" content="notranslate">', unsafe_allow_html=True)
+
 # OpenRouter API Key aus Secrets oder Umgebungsvariablen laden
 api_key = st.secrets.get("OPENROUTER_API_KEY") or os.getenv("OPENROUTER_API_KEY")
 
@@ -47,6 +50,7 @@ modus = st.sidebar.selectbox(
         "💻 Code & Technik",
         "✍️ Kreativer Autor",
     ],
+    key="modus_select"
 )
 
 st.sidebar.markdown("---")
@@ -61,24 +65,16 @@ if st.sidebar.button("➕ Neuer Chat", use_container_width=True):
 
 # 3. Aktiven Chat auswählen
 chat_namen = list(st.session_state.chats.keys())
-aktueller_index = chat_namen.index(st.session_state.active_chat) if st.session_state.active_chat in chat_namen else 0
 
-gewaehlter_chat = st.sidebar.selectbox(
+gewaehlter_chat = st.sidebar.radio(
     "Aktiver Chat:",
     options=chat_namen,
-    index=aktueller_index
+    index=chat_namen.index(st.session_state.active_chat) if st.session_state.active_chat in chat_namen else 0,
+    key="chat_radio"
 )
 st.session_state.active_chat = gewaehlter_chat
 
-# 4. Aktiven Chat umbenennen
-neuer_titel = st.sidebar.text_input("Chat umbenennen:", value=st.session_state.active_chat)
-if neuer_titel and neuer_titel != st.session_state.active_chat:
-    if neuer_titel not in st.session_state.chats:
-        st.session_state.chats[neuer_titel] = st.session_state.chats.pop(st.session_state.active_chat)
-        st.session_state.active_chat = neuer_titel
-        st.rerun()
-
-# 5. Aktuellen Chat löschen
+# 4. Aktuellen Chat löschen
 if st.sidebar.button("🗑️ Diesen Chat löschen", use_container_width=True):
     if len(st.session_state.chats) > 1:
         del st.session_state.chats[st.session_state.active_chat]
@@ -88,7 +84,7 @@ if st.sidebar.button("🗑️ Diesen Chat löschen", use_container_width=True):
         st.session_state.chats[st.session_state.active_chat] = []
         st.rerun()
 
-# 6. Chat als Textdatei herunterladen
+# 5. Chat als Textdatei herunterladen
 aktueller_verlauf = st.session_state.chats[st.session_state.active_chat]
 chat_text = "\n\n".join([f"{m['role'].upper()}: {m['content']}" for m in aktueller_verlauf])
 

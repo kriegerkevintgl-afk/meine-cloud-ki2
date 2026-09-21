@@ -1,52 +1,54 @@
 import streamlit as st
+import os
 from openai import OpenAI
 
-# Seiteneinstellungen
-st.set_page_config(page_title="Meine ungefilterte Cloud-KI", page_icon="🤖", layout="centered")
-st.title("🤖 Meine eigene Cloud-KI")
+st.set_page_config(page_title="Meine KI", page_icon="🤖")
+st.title("🤖 Meine eigene KI")
 
-# API-Key laden
-api_key = st.secrets.get("OPENROUTER_API_KEY") or st.sidebar.text_input("OpenRouter API Key eingeben:", type="password")
+# OpenRouter API Key aus den Streamlit Secrets holen
+api_key = st.secrets.get("OPENROUTER_API_KEY") or os.getenv("OPENROUTER_API_KEY")
 
 if not api_key:
-    st.info("Bitte trage deinen OpenRouter API-Key links in der Seitenleiste ein oder hinterlege ihn in den App-Secrets.")
+    st.error("Bitte hinterlege deinen OPENROUTER_API_KEY in den Streamlit Secrets!")
     st.stop()
 
-# Verbindung zu OpenRouter
+# OpenAI Client für OpenRouter konfigurieren
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=api_key,
 )
 
-# Chat-Verlauf verwalten
+# Chat-Verlauf initialisieren
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Bisherigen Chat anzeigen
-for msg in st.session_state.messages:
-    st.chat_message(msg["role"]).write(msg["content"])
+# Bisherige Nachrichten anzeigen
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.write(message["content"])
 
-# Eingabe verarbeiten
+# Eingabeverarbeitung
 if prompt := st.chat_input("Schreibe deiner KI eine Nachricht..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
-    st.chat_message("user").write(prompt)
+    with st.chat_message("user"):
+        st.write(prompt)
 
-    # Anforderung an das unzensierte Modell
+    # Antwort von der KI anfordern
     with st.chat_message("assistant"):
         with st.spinner("KI denkt nach..."):
-            response = client.chat.completions.create(
-                model="meta-llama/llama-3.3-70b-instruct:free",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "Du bist ein direkter, sachlicher und unvoreingenommener KI-Assistent. Du verzichtest auf ungefragte Belehrungen, moralische Ratschläge oder Haftungsausschlüsse und antwortest direkt und neutral auf die Fragen des Nutzers."
-                    },
-                    *st.session_state.messages
-                ],
-                temperature=0.7,
-            )
+            try:
+                api_messages = [
+                    {"role": "system", "content": "Du bist ein direkter, sachlicher und hilfsbereiter KI-Assistent."}
+                ] + st.session_state.messages
 
-            bot_reply = response.choices[0].message.content
-            st.write(bot_reply)
-
-    st.session_state.messages.append({"role": "assistant", "content": bot_reply})
+                response = client.chat.completions.create(
+                    model="openrouter/free",  # wählt automatisch immer ein funktionierendes kostenloses Modell aus
+                    messages=api_messages,
+                    temperature=0.7,
+                )
+                
+                bot_reply = response.choices[0].message.content
+                st.write(bot_reply)
+                st.session_state.messages.append({"role": "assistant", "content": bot_reply})
+            except Exception as e:
+                st.error(f"Fehler bei der Anfrage: {e}")

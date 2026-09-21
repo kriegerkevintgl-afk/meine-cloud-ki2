@@ -5,10 +5,7 @@ from openai import OpenAI
 # Seiteneinstellungen
 st.set_page_config(page_title="KENA — KI Assistent", page_icon="⚡", layout="centered")
 
-# HTML-Header: Verhindert automatische Übersetzung im Browser (Hauptursache für DOM-/removeChild-Fehler)
-st.markdown('<meta name="google" content="notranslate">', unsafe_allow_html=True)
-
-# OpenRouter API Key laden
+# OpenRouter API Key aus Secrets oder Umgebungsvariablen laden
 api_key = st.secrets.get("OPENROUTER_API_KEY") or os.getenv("OPENROUTER_API_KEY")
 
 if not api_key:
@@ -22,7 +19,7 @@ client = OpenAI(
 )
 
 # ---------------------------------------------------------
-# SITZUNGS-SPEICHER INITIALISIEREN
+# SITZUNGS-SPEICHER (SESSIONS) INITIALISIEREN
 # ---------------------------------------------------------
 if "chats" not in st.session_state:
     st.session_state.chats = {"Chat 1": []}
@@ -46,27 +43,39 @@ modi_liste = [
     "💻 Code & Technik",
     "✍️ Kreativer Autor",
 ]
-modus = st.sidebar.selectbox("Wähle den Modus:", modi_liste, key="main_modus_select")
+
+modus = st.sidebar.selectbox("Wähle den Modus:", modi_liste, key="select_modus_widget")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("💬 Chat-Verwaltung")
 
 # 2. Neuen Chat erstellen
-if st.sidebar.button("➕ Neuer Chat", use_container_width=True):
+if st.sidebar.button("➕ Neuer Chat", key="btn_new_chat", use_container_width=True):
     neuer_name = f"Chat {len(st.session_state.chats) + 1}"
     st.session_state.chats[neuer_name] = []
     st.session_state.active_chat = neuer_name
     st.rerun()
 
-# 3. Chat auswählen (über einfachen Selectbox-Index abgesichert)
+# 3. Aktiven Chat auswählen
 chat_namen = list(st.session_state.chats.keys())
-current_idx = chat_namen.index(st.session_state.active_chat) if st.session_state.active_chat in chat_namen else 0
+if st.session_state.active_chat not in chat_namen:
+    st.session_state.active_chat = chat_namen[0]
 
-gewaehlter_chat = st.sidebar.selectbox("Aktiver Chat:", chat_namen, index=current_idx, key="chat_select_box")
-st.session_state.active_chat = gewaehlter_chat
+aktueller_index = chat_namen.index(st.session_state.active_chat)
 
-# 4. Chat löschen
-if st.sidebar.button("🗑️ Diesen Chat löschen", use_container_width=True):
+gewaehlter_chat = st.sidebar.selectbox(
+    "Aktiver Chat:",
+    options=chat_namen,
+    index=aktueller_index,
+    key="select_chat_widget"
+)
+
+if gewaehlter_chat != st.session_state.active_chat:
+    st.session_state.active_chat = gewaehlter_chat
+    st.rerun()
+
+# 4. Diesen Chat löschen
+if st.sidebar.button("🗑️ Diesen Chat löschen", key="btn_delete_chat", use_container_width=True):
     if len(st.session_state.chats) > 1:
         del st.session_state.chats[st.session_state.active_chat]
         st.session_state.active_chat = list(st.session_state.chats.keys())[0]
@@ -84,6 +93,7 @@ st.sidebar.download_button(
     data=chat_text,
     file_name=f"{st.session_state.active_chat.lower().replace(' ', '_')}.txt",
     mime="text/plain",
+    key="btn_download_chat",
     use_container_width=True
 )
 
@@ -175,20 +185,22 @@ else:  # 💡 Alltagsassistent
 st.title(f"⚡ KENA — {st.session_state.active_chat}")
 st.caption(f"Modus: `{modus}` | Modell: `{modell_name}`")
 
-# Nachrichten anzeigen
+# Nachrichten des aktuell gewählten Chats anzeigen
 active_messages = st.session_state.chats.get(st.session_state.active_chat, [])
 
 for message in active_messages:
     with st.chat_message(message["role"]):
         st.write(message["content"])
 
-# Eingabe verarbeiten
+# Benutzereingabe verarbeiten
 if prompt := st.chat_input("Schreibe eine Nachricht an KENA..."):
+    # Nachricht zum aktiven Chat hinzufügen
     st.session_state.chats[st.session_state.active_chat].append({"role": "user", "content": prompt})
     
     with st.chat_message("user"):
         st.write(prompt)
 
+    # KI-Antwort anfordern
     with st.chat_message("assistant"):
         with st.spinner("KENA tippt..."):
             try:
@@ -203,6 +215,7 @@ if prompt := st.chat_input("Schreibe eine Nachricht an KENA..."):
                 bot_reply = response.choices[0].message.content
                 st.write(bot_reply)
                 
+                # Antwort im aktiven Chat speichern
                 st.session_state.chats[st.session_state.active_chat].append({"role": "assistant", "content": bot_reply})
             except Exception as e:
                 st.error(f"Fehler bei der Anfrage: {e}")

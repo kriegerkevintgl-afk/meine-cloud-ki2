@@ -1,6 +1,7 @@
+import io
 import os
 import streamlit as st
-from duckduckgo_search import DDGS
+from gtts import gTTS
 from openai import OpenAI
 
 # Seiteneinstellungen
@@ -13,14 +14,14 @@ if not api_key:
     st.error("Bitte hinterlege deinen OPENROUTER_API_KEY in den Streamlit Secrets!")
     st.stop()
 
-# OpenAI Client für OpenRouter konfigurieren
+# OpenAI Client für OpenRouter initialisieren
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=api_key,
 )
 
 # ---------------------------------------------------------
-# SEITENLEISTE (Manuelle Modus-Auswahl)
+# SEITENLEISTE (Einstellungen & Modus-Auswahl)
 # ---------------------------------------------------------
 st.sidebar.title("⚙️ Einstellungen")
 
@@ -35,15 +36,17 @@ modus = st.sidebar.selectbox(
     ],
 )
 
-# Optionale Websuche für aktuelle Informationen
-web_search = st.sidebar.checkbox("🔍 Live-Websuche aktivieren", value=False)
+# Schalter für die Sprachausgabe (Vorlesen)
+audio_output = st.sidebar.checkbox("🔊 Antworten vorlesen (Audio)", value=False)
 
 # Button zum Löschen des Chats
 if st.sidebar.button("🗑️ Chat-Verlauf löschen"):
     st.session_state.messages = []
+    if "last_audio_bytes" in st.session_state:
+        del st.session_state["last_audio_bytes"]
     st.rerun()
 
-# Einstellungen je nach gewähltem Modus festlegen
+# Konfiguration je nach Modus
 if modus == "💡 Alltagsassistent":
     system_prompt = (
         "Du bist ein freundlicher, kluger und sachlicher Alltagsassistent. "
@@ -84,7 +87,7 @@ else:  # Kreativer Autor
 # HAUPTSEITE (Chat-Oberfläche)
 # ---------------------------------------------------------
 st.title(f"{modus.split()[0]} {modus.split()[1]}")
-st.caption(f"Modell: `{modell_name}`" + (" | 🔍 Websuche: Aktiv" if web_search else ""))
+st.caption(f"Aktives Modell: `{modell_name}`")
 
 # Chat-Verlauf initialisieren
 if "messages" not in st.session_state:
@@ -95,34 +98,47 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.write(message["content"])
 
-# Benutzereingabe verarbeiten
-if prompt := st.chat_input("Schreibe eine Nachricht..."):
+# ---------------------------------------------------------
+# SPRACHEINGABE & TEXTEINGABE
+# ---------------------------------------------------------
+prompt = None
+
+# Option A: Direktes Mikrofonsymbol zum Aufnehmen
+audio_recorded = st.audio_input("🎤 Sprachnachricht aufnehmen")
+
+if audio_recorded:
+    audio_bytes = audio_recorded.getvalue()
+    # Verhindert mehrfaches Absenden beim Neuladen der Seite
+    if st.session_state.get("last_audio_bytes") != audio_bytes:
+        st.session_state["last_audio_bytes"] = audio_bytes
+        with st.spinner("Wandle Sprache in Text um..."):
+            try:
+                audio_file = ("audio.wav", audio_bytes, "audio/wav")
+                transcript = client.audio.transcriptions.create(
+                    model="openai/whisper-large-v3",
+                    file=audio_file,
+                )
+                prompt = transcript.text
+            except Exception as e:
+                st.error(f"Fehler bei der Spracherkennung: {e}")
+
+# Option B: Klassische Texteingabe (oder Diktierfunktion der Tastatur)
+text_input = st.chat_input("Schreibe eine Nachricht...")
+if text_input:
+    prompt = text_input
+
+# ---------------------------------------------------------
+# VERARBEITUNG & ANTWORT
+# ---------------------------------------------------------
+if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.write(prompt)
 
-    # KI-Antwort anfordern
     with st.chat_message("assistant"):
         with st.spinner("KI antwortet..."):
-            search_results_text = ""
-
-            # Websuche nur durchführen, wenn der Haken in der Seitenleiste gesetzt ist
-            if web_search:
-                try:
-                    results = list(DDGS().text(prompt, max_results=3))
-                    if results:
-                        search_results_text = "\n\n--- Aktuelle Live-Ergebnisse aus dem Web ---\n"
-                        for r in results:
-                            search_results_text += f"- {r.get('title')}: {r.get('body')}\n"
-                except Exception:
-                    pass
-
-            current_system_prompt = system_prompt
-            if search_results_text:
-                current_system_prompt += f"\n\nNutze folgende Echtzeit-Informationen aus dem Internet für deine Antwort:\n{search_results_text}"
-
             try:
-                api_messages = [{"role": "system", "content": current_system_prompt}] + st.session_state.messages
+                api_messages = [{"role": "system", "content": system_prompt}] + st.session_state.messages
 
                 response = client.chat.completions.create(
                     model=modell_name,
@@ -133,5 +149,13 @@ if prompt := st.chat_input("Schreibe eine Nachricht..."):
                 bot_reply = response.choices[0].message.content
                 st.write(bot_reply)
                 st.session_state.messages.append({"role": "assistant", "content": bot_reply})
+
+                # Sprachausgabe erzeugen, falls in der Seitenleiste aktiviert
+                if audio_output:
+                    tts = gTTS(text=bot_reply, lang="de")
+                    sound_file = io.BytesIO()
+                    tts.write_to_fp(sound_file)
+                    st.audio(sound_file, format="audio/mp3", autoplay=True)
+
             except Exception as e:
                 st.error(f"Fehler bei der Anfrage: {e}")

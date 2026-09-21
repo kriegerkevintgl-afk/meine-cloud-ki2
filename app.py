@@ -1,22 +1,15 @@
 import os
 import streamlit as st
 from openai import OpenAI
-import requests
 
 # Seiteneinstellungen
 st.set_page_config(page_title="KENA — KI Assistent", page_icon="⚡", layout="centered")
 
 # API-Schlüssel aus Secrets oder Umgebungsvariablen laden
 api_key = st.secrets.get("OPENROUTER_API_KEY") or os.getenv("OPENROUTER_API_KEY")
-supabase_url = st.secrets.get("SUPABASE_URL") or os.getenv("SUPABASE_URL")
-supabase_key = st.secrets.get("SUPABASE_KEY") or os.getenv("SUPABASE_KEY")
 
 if not api_key:
     st.error("Bitte hinterlege deinen OPENROUTER_API_KEY in den Streamlit Secrets!")
-    st.stop()
-
-if not supabase_url or not supabase_key:
-    st.error("Bitte hinterlege SUPABASE_URL und SUPABASE_KEY in den Streamlit Secrets!")
     st.stop()
 
 # OpenAI Client initialisieren
@@ -25,67 +18,14 @@ client = OpenAI(
     api_key=api_key,
 )
 
-# Supabase REST-Header vorbereiten
-supabase_headers = {
-    "apikey": supabase_key,
-    "Authorization": f"Bearer {supabase_key}",
-    "Content-Type": "application/json",
-    "Prefer": "return=minimal"
-}
-
 # ---------------------------------------------------------
-# SUPABASE HILFSFUNKTIONEN (ÜBER DIREKTE HTTP-REQUESTS)
-# ---------------------------------------------------------
-def load_chats_from_db():
-    try:
-        url = f"{supabase_url}/rest/v1/kena_chats?select=*&order=id.asc"
-        response = requests.get(url, headers=supabase_headers)
-        if response.status_code == 200:
-            rows = response.json()
-            chats = {}
-            for row in rows:
-                c_name = row["chat_name"]
-                if c_name not in chats:
-                    chats[c_name] = []
-                chats[c_name].append({"role": row["role"], "content": row["content"]})
-            if not chats:
-                chats = {"Chat 1": []}
-            return chats
-        else:
-            st.error(f"Datenbank-Fehler beim Laden: {response.text}")
-            return {"Chat 1": []}
-    except Exception as e:
-        st.error(f"Fehler beim Laden aus der Datenbank: {e}")
-        return {"Chat 1": []}
-
-def save_message_to_db(chat_name, role, content):
-    try:
-        url = f"{supabase_url}/rest/v1/kena_chats"
-        payload = {
-            "chat_name": chat_name,
-            "role": role,
-            "content": content
-        }
-        requests.post(url, headers=supabase_headers, json=payload)
-    except Exception as e:
-        st.error(f"Fehler beim Speichern in der Datenbank: {e}")
-
-def delete_chat_from_db(chat_name):
-    try:
-        url = f"{supabase_url}/rest/v1/kena_chats?chat_name=eq.{chat_name}"
-        requests.delete(url, headers=supabase_headers)
-    except Exception as e:
-        st.error(f"Fehler beim Löschen in der Datenbank: {e}")
-
-# ---------------------------------------------------------
-# SITZUNGS-SPEICHER INITIALISIEREN
+# SITZUNGS-SPEICHER INITIALISIEREN (LOKAL)
 # ---------------------------------------------------------
 if "chats" not in st.session_state:
-    st.session_state.chats = load_chats_from_db()
+    st.session_state.chats = {"Chat 1": []}
 
 if "active_chat" not in st.session_state:
-    chat_namen_init = list(st.session_state.chats.keys())
-    st.session_state.active_chat = chat_namen_init[0] if chat_namen_init else "Chat 1"
+    st.session_state.active_chat = "Chat 1"
 
 # ---------------------------------------------------------
 # SEITENLEISTE (Einstellungen & Chat-Verwaltung)
@@ -140,13 +80,11 @@ if st.sidebar.button("🗑️ Diesen Chat löschen", key="btn_delete_chat", use_
     if len(st.session_state.chats) > 1:
         chat_zu_loeschen = st.session_state.active_chat
         del st.session_state.chats[chat_zu_loeschen]
-        delete_chat_from_db(chat_zu_loeschen)
         st.session_state.active_chat = list(st.session_state.chats.keys())[0]
         st.rerun()
     else:
         chat_zu_loeschen = st.session_state.active_chat
         st.session_state.chats[chat_zu_loeschen] = []
-        delete_chat_from_db(chat_zu_loeschen)
         st.rerun()
 
 # 5. Chat als Textdatei herunterladen
@@ -259,7 +197,7 @@ else:  # 💡 Alltagsassistent
 # HAUPTSEITE (Chat-Oberfläche)
 # ---------------------------------------------------------
 st.title(f"⚡ KENA — {st.session_state.active_chat}")
-st.caption(f"Modus: `{modus}` | Modell: `{modell_name}` (Supabase-REST-gesichert)")
+st.caption(f"Modus: `{modus}` | Modell: `{modell_name}`")
 
 # Nachrichten des aktuell gewählten Chats anzeigen
 active_messages = st.session_state.chats.get(st.session_state.active_chat, [])
@@ -272,9 +210,8 @@ for message in active_messages:
 if prompt := st.chat_input("Schreibe eine Nachricht an KENA..."):
     active_chat_name = st.session_state.active_chat
     
-    # Nachricht lokal & in Supabase speichern
+    # Nachricht lokal speichern
     st.session_state.chats[active_chat_name].append({"role": "user", "content": prompt})
-    save_message_to_db(active_chat_name, "user", prompt)
     
     with st.chat_message("user"):
         st.write(prompt)
@@ -294,8 +231,7 @@ if prompt := st.chat_input("Schreibe eine Nachricht an KENA..."):
                 bot_reply = response.choices[0].message.content
                 st.write(bot_reply)
                 
-                # Antwort lokal & in Supabase speichern
+                # Antwort lokal speichern
                 st.session_state.chats[active_chat_name].append({"role": "assistant", "content": bot_reply})
-                save_message_to_db(active_chat_name, "assistant", bot_reply)
             except Exception as e:
                 st.error(f"Fehler bei der Anfrage: {e}")

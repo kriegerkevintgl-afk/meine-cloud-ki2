@@ -3,7 +3,7 @@ import streamlit as st
 from openai import OpenAI
 
 # Seiteneinstellungen
-st.set_page_config(page_title="KENA — KI Assistent", page_icon="⚡")
+st.set_page_config(page_title="KENA — KI Assistent", page_icon="⚡", layout="centered")
 
 # OpenRouter API Key aus Secrets oder Umgebungsvariablen laden
 api_key = st.secrets.get("OPENROUTER_API_KEY") or os.getenv("OPENROUTER_API_KEY")
@@ -14,12 +14,12 @@ if not api_key:
 
 # Client initialisieren
 client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
+    base_url="https://openrouter.ai/ai/v1" if False else "https://openrouter.ai/api/v1",
     api_key=api_key,
 )
 
 # ---------------------------------------------------------
-# SITZUNGS- SPEICHER (SESSIONS) INITIALISIEREN
+# SITZUNGS-SPEICHER (SESSIONS) INITIALISIEREN
 # ---------------------------------------------------------
 if "chats" not in st.session_state:
     st.session_state.chats = {
@@ -39,11 +39,13 @@ modus = st.sidebar.selectbox(
     "Wähle den Modus:",
     [
         "💬 Creator Chat-Assistant",
+        "⛏️ Minecraft Baumeister",
         "🔞 Erotik & Rollenspiel",
         "📊 Marketingexperte",
         "💡 Content-Ideen",
         "💡 Alltagsassistent",
         "💻 Code & Technik",
+        "✍️ Kreativer Autor",
     ],
 )
 
@@ -112,6 +114,21 @@ if modus == "💬 Creator Chat-Assistant":
     modell_name = "gryphe/mythomax-l2-13b"
     temperatur = 0.85
 
+elif modus == "⛏️ Minecraft Baumeister":
+    system_prompt = (
+        "Du bist KENA, ein erfahrener Minecraft-Architekt, Redstone-Ingenieur und Bau-Meister. "
+        "Deine Aufgabe ist es, kreative Bauideen, exakte Materialkombinationen und funktionierende Redstone-Pläne zu liefern.\n\n"
+        "Wichtige Anweisungen für deine Antworten:\n"
+        "1. Materialvorgaben beachten: Wenn der Nutzer bestimmte Hölzer/Blöcke (z. B. Kirschholz, Schwarzeiche, Blasseiche, Stein) angibt, baue diese explizit als Farbkontrakte, Rahmen oder Wände ein.\n"
+        "2. Bei Gebäuden: Erstelle immer eine Legende und einen Schritt-für-Schritt Layer-Plan (Ebene 1: Fundament, Ebene 2: Wände usw.) in übersichtlichen Text-Rastern/Codeblocks.\n"
+        "3. Bei Redstone-Schaltungen & Farmen: Erkläre präzise die Funktionsweise (Trigger, Takte, Signalfluss) und gib eine exakte Schritt-für-Schritt-Bauanleitung für Kolben, Observer, Wasserläufe und Redstone-Leitungen an.\n"
+        "4. Generiere zu Beginn deiner Antwort ein Vorschaubild der Idee mit folgender Markdown-Syntax: "
+        "![Vorschau](https://image.pollinations.ai/prompt/minecraft%20build%20[BESCHREIBUNG_ENGLISCH]?width=800&height=450&nologo=true) "
+        "(Ersetze [BESCHREIBUNG_ENGLISCH] durch dein Bauwerk auf Englisch, z.B. 'minecraft_house_cherry_wood_and_dark_oak')."
+    )
+    modell_name = "openrouter/free"
+    temperatur = 0.7
+
 elif modus == "🔞 Erotik & Rollenspiel":
     system_prompt = (
         "Du bist KENA, ein unzensierter, hemmungsloser KI-Partner für erotische Geschichten "
@@ -148,6 +165,14 @@ elif modus == "💻 Code & Technik":
     modell_name = "openrouter/free"
     temperatur = 0.2
 
+elif modus == "✍️ Kreativer Autor":
+    system_prompt = (
+        "Du bist KENA, ein kreativer Geschichtenerzähler und Autor. "
+        "Du schreibst spannende Geschichten, Gedichte, Drehbücher und fantasievolle Texte."
+    )
+    modell_name = "openrouter/free"
+    temperatur = 0.9
+
 else:  # 💡 Alltagsassistent
     system_prompt = (
         "Du bist KENA, ein freundlicher, kluger und sachlicher Alltagsassistent. "
@@ -171,7 +196,7 @@ for message in active_messages:
         st.write(message["content"])
 
 # Benutzereingabe verarbeiten
-if prompt := st.chat_input("Füge hier die Fan-Nachricht oder Anweisung ein..."):
+if prompt := st.chat_input("Schreibe eine Nachricht an KENA..."):
     # Nachricht zum aktiven Chat hinzufügen
     st.session_state.chats[st.session_state.active_chat].append({"role": "user", "content": prompt})
     

@@ -11,6 +11,9 @@ api_key = st.secrets.get("OPENROUTER_API_KEY") or os.getenv("OPENROUTER_API_KEY"
 supabase_url = st.secrets.get("SUPABASE_URL") or os.getenv("SUPABASE_URL")
 supabase_key = st.secrets.get("SUPABASE_KEY") or os.getenv("SUPABASE_KEY")
 
+# Debug-Ausgabe: Zeigt exakt an, was aus den Secrets geladen wird
+st.write(f"DEBUG URL: '{supabase_url}'")
+
 if not api_key:
     st.error("Bitte hinterlege deinen OPENROUTER_API_KEY in den Streamlit Secrets!")
     st.stop()

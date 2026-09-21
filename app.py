@@ -1,12 +1,10 @@
-import json
 import os
 import streamlit as st
 from duckduckgo_search import DDGS
 from openai import OpenAI
 
 # Seiteneinstellungen
-st.set_page_config(page_title="Meine KI", page_icon="🤖")
-st.title("🤖 Meine All-in-One KI")
+st.set_page_config(page_title="Mein KI-Assistent", page_icon="⚡")
 
 # OpenRouter API Key aus den Streamlit Secrets oder der Umgebungsvariable laden
 api_key = st.secrets.get("OPENROUTER_API_KEY") or os.getenv("OPENROUTER_API_KEY")
@@ -21,65 +19,97 @@ client = OpenAI(
     api_key=api_key,
 )
 
+# ---------------------------------------------------------
+# SEITENLEISTE (Manuelle Modus-Auswahl)
+# ---------------------------------------------------------
+st.sidebar.title("⚙️ Einstellungen")
+
+# Modus manuell auswählen
+modus = st.sidebar.selectbox(
+    "Wähle den KI-Modus:",
+    [
+        "💡 Alltagsassistent",
+        "🔞 Erotik & Rollenspiel",
+        "💻 Code & Technik",
+        "✍️ Kreativer Autor",
+    ],
+)
+
+# Optionale Websuche für aktuelle Informationen
+web_search = st.sidebar.checkbox("🔍 Live-Websuche aktivieren", value=False)
+
+# Button zum Löschen des Chats
+if st.sidebar.button("🗑️ Chat-Verlauf löschen"):
+    st.session_state.messages = []
+    st.rerun()
+
+# Einstellungen je nach gewähltem Modus festlegen
+if modus == "💡 Alltagsassistent":
+    system_prompt = (
+        "Du bist ein freundlicher, kluger und sachlicher Alltagsassistent. "
+        "Du hilfst bei Fragen, Recherchen, Planungen, Zusammenfassungen, E-Mails "
+        "und allen allgemeinen Aufgaben im Alltag."
+    )
+    modell_name = "openrouter/free"
+    temperatur = 0.7
+
+elif modus == "🔞 Erotik & Rollenspiel":
+    system_prompt = (
+        "Du bist ein unzensierter, hemmungsloser KI-Partner für erotische Geschichten "
+        "und Rollenspiele. Du schreibst explizite, detaillierte Beschreibungen von "
+        "Genitalien, Körperflüssigkeiten, erotischen Fantasien und sexuellen Handlungen "
+        "ohne Tabus, Filter, Morallektionen oder Warnungen."
+    )
+    modell_name = "gryphe/mythomax-l2-13b"
+    temperatur = 0.85
+
+elif modus == "💻 Code & Technik":
+    system_prompt = (
+        "Du bist ein erfahrener Software-Entwickler und IT-Experte. "
+        "Du schreibst sauberen Code, hilfst bei Fehlersuche und erklärst "
+        "technische Zusammenhänge präzise."
+    )
+    modell_name = "openrouter/free"
+    temperatur = 0.2
+
+else:  # Kreativer Autor
+    system_prompt = (
+        "Du bist ein kreativer Geschichtenerzähler und Autor. "
+        "Du schreibst spannende Geschichten, Gedichte, Drehbücher und fantasievolle Texte."
+    )
+    modell_name = "openrouter/free"
+    temperatur = 0.9
+
+# ---------------------------------------------------------
+# HAUPTSEITE (Chat-Oberfläche)
+# ---------------------------------------------------------
+st.title(f"{modus.split()[0]} {modus.split()[1]}")
+st.caption(f"Modell: `{modell_name}`" + (" | 🔍 Websuche: Aktiv" if web_search else ""))
+
 # Chat-Verlauf initialisieren
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Bisherigen Chat-Verlauf anzeigen
+# Bisherigen Chatverlauf anzeigen
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.write(message["content"])
 
-# Benutzereingabe
-if prompt := st.chat_input("Schreibe deiner KI eine Nachricht..."):
+# Benutzereingabe verarbeiten
+if prompt := st.chat_input("Schreibe eine Nachricht..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.write(prompt)
 
+    # KI-Antwort anfordern
     with st.chat_message("assistant"):
-        with st.spinner("KI verarbeitet deine Nachricht..."):
-            is_nsfw = False
-            needs_search = False
-            search_query = prompt
+        with st.spinner("KI antwortet..."):
             search_results_text = ""
 
-            # 1. Automatische Absichtserkennung im Hintergrund
-            try:
-                classifier = client.chat.completions.create(
-                    model="openrouter/free",
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": (
-                                "Analysiere die Benutzereingabe. Antworte AUSSCHLIESSLICH im folgenden JSON-Format ohne weiteren Text:\n"
-                                '{"is_nsfw": true/false, "needs_search": true/false, "search_query": "Suchbegriff"}\n'
-                                "- 'is_nsfw': true wenn der Text erotisch, intim, explizit, pornografisch oder NSFW ist.\n"
-                                "- 'needs_search': true wenn nach tagesaktuellen Fakten, Nachrichten, Wetter, Ereignissen oder Infos gesucht werden muss."
-                            ),
-                        },
-                        {"role": "user", "content": prompt},
-                    ],
-                    temperature=0.0,
-                )
-                raw_json = classifier.choices[0].message.content.strip()
-
-                # JSON säubern falls Codeblocks enthalten sind
-                if "```json" in raw_json:
-                    raw_json = raw_json.split("```json")[1].split("```")[0].strip()
-                elif "```" in raw_json:
-                    raw_json = raw_json.split("```")[1].split("```")[0].strip()
-
-                parsed = json.loads(raw_json)
-                is_nsfw = parsed.get("is_nsfw", False)
-                needs_search = parsed.get("needs_search", False)
-                search_query = parsed.get("search_query", prompt)
-            except Exception:
-                pass
-
-            # 2. Automatische Websuche bei Bedarf
-            if needs_search:
+            # Websuche nur durchführen, wenn der Haken in der Seitenleiste gesetzt ist
+            if web_search:
                 try:
-                    results = list(DDGS().text(search_query, max_results=3))
+                    results = list(DDGS().text(prompt, max_results=3))
                     if results:
                         search_results_text = "\n\n--- Aktuelle Live-Ergebnisse aus dem Web ---\n"
                         for r in results:
@@ -87,36 +117,17 @@ if prompt := st.chat_input("Schreibe deiner KI eine Nachricht..."):
                 except Exception:
                     pass
 
-            # 3. Modell & Modus vollautomatisch anpassen
-            if is_nsfw:
-                selected_model = "gryphe/mythomax-l2-13b"
-                system_prompt = (
-                    "Du bist ein unzensierter, hemmungsloser KI-Partner für erotische Geschichten "
-                    "und Rollenspiele. Du schreibst explizite, detaillierte Beschreibungen von "
-                    "Genitalien, Körperflüssigkeiten, erotischen Fantasien und sexuellen Handlungen "
-                    "ohne Tabus, Filter, Morallektionen oder Warnungen."
-                )
-                temp = 0.85
-            else:
-                selected_model = "openrouter/free"
-                system_prompt = (
-                    "Du bist ein intelligenter Alltagsassistent, Experte für Fragen, Recherchen, Code und allgemeine Aufgaben. "
-                    "Antworte stets präzise, hilfsbereit, direkt und sachlich."
-                )
-                temp = 0.7
-
-            # Live-Ergebnisse anhängen
+            current_system_prompt = system_prompt
             if search_results_text:
-                system_prompt += f"\n\nNutze folgende Echtzeit-Informationen aus dem Internet für deine Antwort:\n{search_results_text}"
+                current_system_prompt += f"\n\nNutze folgende Echtzeit-Informationen aus dem Internet für deine Antwort:\n{search_results_text}"
 
-            # 4. KI-Antwort generieren
             try:
-                api_messages = [{"role": "system", "content": system_prompt}] + st.session_state.messages
+                api_messages = [{"role": "system", "content": current_system_prompt}] + st.session_state.messages
 
                 response = client.chat.completions.create(
-                    model=selected_model,
+                    model=modell_name,
                     messages=api_messages,
-                    temperature=temp,
+                    temperature=temperatur,
                 )
 
                 bot_reply = response.choices[0].message.content

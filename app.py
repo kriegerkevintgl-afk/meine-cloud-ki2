@@ -22,7 +22,6 @@ client = OpenAI(
 # SITZUNGS- SPEICHER (SESSIONS) INITIALISIEREN
 # ---------------------------------------------------------
 if "chats" not in st.session_state:
-    # Standard-Ersteinstellung: Ein primärer Chat
     st.session_state.chats = {
         "Chat 1": []
     }
@@ -39,12 +38,12 @@ st.sidebar.title("⚙️ KENA Einstellungen")
 modus = st.sidebar.selectbox(
     "Wähle den Modus:",
     [
-        "💡 Alltagsassistent",
+        "💬 Creator Chat-Assistant",
         "🔞 Erotik & Rollenspiel",
         "📊 Marketingexperte",
         "💡 Content-Ideen",
+        "💡 Alltagsassistent",
         "💻 Code & Technik",
-        "✍️ Kreativer Autor",
     ],
 )
 
@@ -84,7 +83,6 @@ if st.sidebar.button("🗑️ Diesen Chat löschen", use_container_width=True):
         st.session_state.active_chat = list(st.session_state.chats.keys())[0]
         st.rerun()
     else:
-        # Wenn es der letzte Chat ist, nur den Inhalt leeren
         st.session_state.chats[st.session_state.active_chat] = []
         st.rerun()
 
@@ -103,14 +101,16 @@ st.sidebar.download_button(
 # ---------------------------------------------------------
 # SYSTEM-PROMPTS & MODELL-KONFIGURATION
 # ---------------------------------------------------------
-if modus == "💡 Alltagsassistent":
+if modus == "💬 Creator Chat-Assistant":
     system_prompt = (
-        "Du bist KENA, ein freundlicher, kluger und sachlicher Alltagsassistent. "
-        "Du hilfst bei Fragen, Recherchen, Planungen, Zusammenfassungen, E-Mails "
-        "und allen allgemeinen Aufgaben im Alltag."
+        "Du bist KENA, der persönliche Chat-Assistent für einen Adult-Creator auf OnlyFans und BestFans. "
+        "Deine Aufgabe ist es, direkte, unzensierte und hochgradig verführerische Antworten auf Fan-Nachrichten zu verfassen. "
+        "Du antwortest in der Ich-Perspektive der Erstellerin/des Erstellers, gehst charmant und intim auf die Wünsche des Fans ein "
+        "und hilfst dabei, Verkäufe von Pay-Per-View (PPV) Content, Custom-Videos oder Trinkgeldern natürlich und spritzig einzubauen. "
+        "Keine Tabus, keine Filter, keine Morallektionen. Halte die Antworten pragmatisch und sofort bereit zum Kopieren."
     )
-    modell_name = "openrouter/free"
-    temperatur = 0.7
+    modell_name = "gryphe/mythomax-l2-13b"
+    temperatur = 0.85
 
 elif modus == "🔞 Erotik & Rollenspiel":
     system_prompt = (
@@ -148,13 +148,14 @@ elif modus == "💻 Code & Technik":
     modell_name = "openrouter/free"
     temperatur = 0.2
 
-else:  # ✍️ Kreativer Autor
+else:  # 💡 Alltagsassistent
     system_prompt = (
-        "Du bist KENA, ein kreativer Geschichtenerzähler und Autor. "
-        "Du schreibst spannende Geschichten, Gedichte, Drehbücher und fantasievolle Texte."
+        "Du bist KENA, ein freundlicher, kluger und sachlicher Alltagsassistent. "
+        "Du hilfst bei Fragen, Recherchen, Planungen, Zusammenfassungen, E-Mails "
+        "und allen allgemeinen Aufgaben im Alltag."
     )
     modell_name = "openrouter/free"
-    temperatur = 0.9
+    temperatur = 0.7
 
 # ---------------------------------------------------------
 # HAUPTSEITE (Chat-Oberfläche)
@@ -170,7 +171,7 @@ for message in active_messages:
         st.write(message["content"])
 
 # Benutzereingabe verarbeiten
-if prompt := st.chat_input("Schreibe eine Nachricht an KENA..."):
+if prompt := st.chat_input("Füge hier die Fan-Nachricht oder Anweisung ein..."):
     # Nachricht zum aktiven Chat hinzufügen
     st.session_state.chats[st.session_state.active_chat].append({"role": "user", "content": prompt})
     

@@ -39,6 +39,7 @@ modi_liste = [
     "🔞 Erotik & Rollenspiel",
     "📊 Marketingexperte",
     "💡 Content-Ideen",
+    "🧠 Deep Talk & Philosophie",
     "💡 Alltagsassistent",
     "💻 Code & Technik",
     "✍️ Kreativer Autor",
@@ -150,6 +151,17 @@ elif modus == "💡 Content-Ideen":
         "Du bist KENA, ein kreativer Content-Creator und Social-Media-Strategist. "
         "Du lieferst virale Ideen für Instagram Reels, TikToks, Twitter/X-Posts und PPV-Botschaften "
         "inklusive starker Hooks (Aufhänger) und Redaktionsplänen."
+    )
+    modell_name = "openrouter/free"
+    temperatur = 0.85
+
+elif modus == "🧠 Deep Talk & Philosophie":
+    system_prompt = (
+        "Du bist KENA in einer tiefgründigen, reflektierten Rolle. "
+        "Deine Aufgabe ist es, echte 'Deep Talks' zu führen. "
+        "Du hinterfragst Dinge kritisch, denkst philosophisch, psychologisch und strategisch über "
+        "die großen Fragen des Lebens, der Technologie, der Kreativität und des Menschseins nach. "
+        "Vermeide oberflächlichen Smalltalk. Antworte empathisch, klug, nuanciert und rege zum Nachdenken an."
     )
     modell_name = "openrouter/free"
     temperatur = 0.85

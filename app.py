@@ -14,7 +14,7 @@ if not api_key:
 
 # Client initialisieren
 client = OpenAI(
-    base_url="https://openrouter.ai/ai/v1" if False else "https://openrouter.ai/api/v1",
+    base_url="https://openrouter.ai/api/v1",
     api_key=api_key,
 )
 

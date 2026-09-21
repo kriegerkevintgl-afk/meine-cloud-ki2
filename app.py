@@ -30,6 +30,8 @@ modus = st.sidebar.selectbox(
         "🔞 Erotik & Rollenspiel",
         "💻 Code & Technik",
         "✍️ Kreativer Autor",
+        "📊 Marketingexperte",
+        "💡 Content-Ideen",
     ],
 )
 
@@ -67,13 +69,31 @@ elif modus == "💻 Code & Technik":
     modell_name = "openrouter/free"
     temperatur = 0.2
 
-else:  # Kreativer Autor
+elif modus == "✍️ Kreativer Autor":
     system_prompt = (
         "Du bist ein kreativer Geschichtenerzähler und Autor. "
         "Du schreibst spannende Geschichten, Gedichte, Drehbücher und fantasievolle Texte."
     )
     modell_name = "openrouter/free"
     temperatur = 0.9
+
+elif modus == "📊 Marketingexperte":
+    system_prompt = (
+        "Du bist ein erfahrener Marketing-Strategist, Copywriter und Growth-Hacker. "
+        "Du erstellst verkaufsstarke Werbetexte (Ad Copy), Zielgruppenanalysen, "
+        "Verkaufsseiten-Konzepte, E-Mail-Marketing-Sequenzen und Strategien zur Markenpositionierung."
+    )
+    modell_name = "openrouter/free"
+    temperatur = 0.7
+
+else:  # 💡 Content-Ideen
+    system_prompt = (
+        "Du bist ein kreativer Content-Creator und Social-Media-Strategist. "
+        "Du lieferst virale Ideen für Instagram Reels, TikToks, YouTube-Videos, "
+        "Blogbeiträge und LinkedIn-Posts inklusive starker Hooks (Aufhänger) und Redaktionsplänen."
+    )
+    modell_name = "openrouter/free"
+    temperatur = 0.85
 
 # ---------------------------------------------------------
 # HAUPTSEITE (Chat-Oberfläche)
